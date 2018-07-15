@@ -1,7 +1,7 @@
-
 import numpy as np
 
-class PID(object):
+
+class PID:
     """Implementation of a PID controller.
 
     This implementation is geared towards discrete time systems,
@@ -12,17 +12,26 @@ class PID(object):
     with constant timesteps.
     """
     
-    def __init__(self, kp=0.5, ki=0.0, kd=0.01):
+    def __init__(self, gain=1, kp=0.5, ki=0.0, kd=0.01):
+        self.gain = gain
         self.kp = kp
         self.ki = ki
         self.kd = kd
-        self.first = True
+
+        self.output_max = None
+        self.output_min = None
+
+        self._first = True
+        self._last_error = 0
+        self._sum_error = 0
+
+        self.rate = 0
 
     def update(self, error, dt):
         """Update the PID controller.
        
         Computes the new control value as                 
-            u(t) = kp*err(t) + kd*d/dt(err(t)) + ki*I(e)
+            u(t) = gain*(kp*err(t) + kd*d/dt(err(t)) + ki*I(e))
         
         where I(e) is the integral of the error up to the current timepoint.
 
@@ -34,16 +43,23 @@ class PID(object):
             Returns the control value u(t)
         """
 
-        if self.first:
-            self.lastError = np.copy(error)
-            self.sumError = np.zeros(error.shape)
-            self.first = False
+        if self._first:
+            self._last_error = np.copy(error)
+            self._sum_error = np.zeros(error.shape)
+            self._first = False
 
-        derr = (error - self.lastError) / dt
+        derr = (error-self._last_error)/dt
 
-        self.sumError += error * dt
-        self.lastError[:] = error
+        self._sum_error += error*dt
+        self._last_error = error
 
-        u = self.kp * error + self.kd * derr + self.ki * self.sumError
+        u = (self.kp * error + self.kd * derr + self.ki * self._sum_error)*self.gain
+
+        # clip control value to output limits
+        if (self.output_min is not None) or (self.output_max is not None):
+            u = np.clip(u, self.output_min, self.output_max)
 
         return u
+
+    def reset(self):
+        self._first = True
